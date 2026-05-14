@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GoalFlow – Check-in Hàng Ngày</title>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Crimson+Pro:wght@300;400;600&display=swap" rel="stylesheet" />
+  <style>
+    /* ── Design tokens (đồng bộ GoalFlow) ── */
+    :root {
+      --primary:      #2D3748;
+      --accent:       #667EEA;
+      --accent2:      #764BA2;
+      --success:      #48BB78;
+      --warning:      #ECC94B;
+      --danger:       #F56565;
+      --bg:           #F7FAFC;
+      --surface:      #FFFFFF;
+      --border:       #E2E8F0;
+      --text:         #1A202C;
+      --muted:        #718096;
+      --gradient:     linear-gradient(135deg,#667EEA 0%,#764BA2 100%);
+      --radius-sm:    8px;
+      --radius-md:    12px;
+      --radius-lg:    20px;
+      --shadow-sm:    0 1px 3px rgba(0,0,0,.06);
+      --shadow-md:    0 4px 16px rgba(0,0,0,.10);
+      --shadow-lg:    0 10px 40px rgba(102,126,234,.25);
+      --font-display: 'Space Mono', monospace;
+      --font-body:    'Crimson Pro', serif;
+      --ease:         cubic-bezier(.4,0,.2,1);
+    }
+
+    *{margin:0;padding:0;box-sizing:border-box}
+
+    body {
+      font-family: var(--font-body);
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 40px 16px 60px;
+    }
+
+    /* ── Page header ── */
+    .page-header {
+      width: 100%;
+      max-width: 680px;
+      margin-bottom: 32px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+    .page-header .logo-icon {
+      width: 42px; height: 42px;
+      background: var(--gradient);
+      border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .page-header .logo-icon svg { color: #fff; }
+    .page-header h1 {
+      font-family: var(--font-display);
+      font-size: 1.25rem;
+      letter-spacing: -0.5px;
+    }
+    .page-header h1 span { color: var(--accent); }
+    .back-btn {
+      margin-left: auto;
+      background: none; border: none;
+      color: var(--muted); cursor: pointer;
+      font-family: var(--font-display);
+      font-size: .75rem;
+      display: flex; align-items: center; gap: 6px;
+      transition: color .2s;
+    }
+    .back-btn:hover { color: var(--accent); }
+
+    /* ── Card container ── */
+    .card {
+      width: 100%; max-width: 680px;
+      background: var(--surface);
+      border-radius: var(--radius-lg);
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow-md);
+      overflow: hidden;
+    }
+
+    /* ── Card header band ── */
+    .card-band {
+      background: var(--gradient);
+      padding: 24px 28px 20px;
+      color: #fff;
+    }
+    .card-band .goal-label {
+      font-family: var(--font-display);
+      font-size: .7rem;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      opacity: .75;
+      margin-bottom: 6px;
+    }
+    .card-band .goal-title {
+      font-family: var(--font-display);
+      font-size: 1.15rem;
+      font-weight: 700;
+      margin-bottom: 10px;
+    }
+    .progress-bar-wrap {
+      background: rgba(255,255,255,.2);
+      border-radius: 99px;
+      height: 6px;
+      overflow: hidden;
+    }
+    .progress-bar-fill {
+      height: 100%;
+      background: #fff;
+      border-radius: 99px;
+      transition: width .6s var(--ease);
+    }
+    .progress-text {
+      margin-top: 6px;
+      font-size: .8rem;
+      opacity: .85;
+      font-family: var(--font-display);
+    }
+
+    /* ── Card body ── */
+    .card-body { padding: 28px; }
+
+    /* ── Section label ── */
+    .section-label {
+      font-family: var(--font-display);
+      font-size: .7rem;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--muted);
+      margin-bottom: 14px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .section-label::after {
+      content:''; flex:1;
+      height: 1px; background: var(--border);
+    }
+
+    /* ── Milestone list ── */
+    .milestone-list {
+      display: flex; flex-direction: column; gap: 10px;
+      margin-bottom: 28px;
+    }
+    .milestone-item {
+      display: flex; align-items: flex-start; gap: 12px;
+      background: var(--bg);
+      border: 1.5px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 12px 14px;
+      cursor: pointer;
+      transition: all .22s var(--ease);
+      user-select: none;
+    }
+    .milestone-item:hover {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(102,126,234,.08);
+    }
+    .milestone-item.done {
+      background: rgba(72,187,120,.06);
+      border-color: var(--success);
+    }
+    .milestone-item.done .milestone-task {
+      text-decoration: line-through;
+      color: var(--muted);
+    }
+
+    /* custom checkbox */
+    .m-check {
+      width: 22px; height: 22px; flex-shrink: 0;
+      border: 2px solid var(--border);
+      border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
+      transition: all .2s var(--ease);
+      margin-top: 1px;
+    }
+    .milestone-item.done .m-check {
+      background: var(--success);
+      border-color: var(--success);
+    }
+    .m-check svg { display: none; }
+    .milestone-item.done .m-check svg { display: block; }
+
+    .milestone-task {
+      font-size: 1rem;
+      line-height: 1.5;
+      transition: color .2s;
+    }
+    .milestone-badge {
+      margin-left: auto;
+      font-family: var(--font-display);
+      font-size: .65rem;
+      padding: 2px 8px;
+      border-radius: 99px;
+      background: rgba(102,126,234,.1);
+      color: var(--accent);
+      white-space: nowrap;
+      align-self: center;
+    }
+    .milestone-item.done .milestone-badge {
+      background: rgba(72,187,120,.15);
+      color: #2F855A;
+    }
+
+    /* ── Diary textarea ── */
+    .diary-wrap { margin-bottom: 24px; }
+    .diary-textarea {
+      width: 100%;
+      min-height: 130px;
+      resize: vertical;
+      padding: 14px 16px;
+      font-family: var(--font-body);
+      font-size: 1.05rem;
+      line-height: 1.65;
+      border: 2px solid var(--border);
+      border-radius: var(--radius-sm);
+      background: var(--bg);
+      color: var(--text);
+      transition: border-color .2s, box-shadow .2s;
+    }
+    .diary-textarea:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(102,126,234,.1);
+      background: var(--surface);
+    }
+    .diary-textarea::placeholder { color: var(--muted); }
+    .char-count {
+      text-align: right;
+      font-size: .78rem;
+      color: var(--muted);
+      margin-top: 6px;
+      font-family: var(--font-display);
+      transition: color .2s;
+    }
+    .char-count.warn { color: var(--warning); }
+
+    /* ── Submit button ── */
+    .btn-submit {
+      width: 100%;
+      padding: 15px 24px;
+      background: var(--gradient);
+      color: #fff;
+      border: none;
+      border-radius: var(--radius-sm);
+      font-family: var(--font-display);
+      font-size: .85rem;
+      font-weight: 700;
+      letter-spacing: .5px;
+      text-transform: uppercase;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center; gap: 10px;
+      box-shadow: var(--shadow-lg);
+      transition: opacity .2s, transform .2s var(--ease), box-shadow .2s;
+      position: relative;
+      overflow: hidden;
+    }
+    .btn-submit:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 14px 40px rgba(102,126,234,.45);
+    }
+    .btn-submit:active:not(:disabled) { transform: translateY(0); }
+    .btn-submit:disabled { opacity: .7; cursor: not-allowed; }
+
+    /* shimmer overlay while loading */
+    .btn-submit::after {
+      content: '';
+      position: absolute;
+      top: 0; left: -100%;
+      width: 60%; height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,.3), transparent);
+      animation: none;
+    }
+    .btn-submit.loading::after {
+      animation: shimmer 1.2s infinite;
+    }
+    @keyframes shimmer {
+      to { left: 150%; }
+    }
+
+    /* spinner inside button */
+    .spinner {
+      width: 18px; height: 18px;
+      border: 2.5px solid rgba(255,255,255,.35);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin .75s linear infinite;
+      display: none;
+    }
+    .btn-submit.loading .spinner { display: block; }
+    .btn-submit.loading .btn-icon-static { display: none; }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── AI Feedback panel ── */
+    .feedback-panel {
+      margin-top: 24px;
+      border-radius: var(--radius-md);
+      overflow: hidden;
+      border: 2px solid transparent;
+      animation: fadeUp .4s var(--ease);
+      display: none;
+    }
+    .feedback-panel.show { display: block; }
+
+    @keyframes fadeUp {
+      from { opacity:0; transform: translateY(12px); }
+      to   { opacity:1; transform: translateY(0); }
+    }
+
+    /* approved → green */
+    .feedback-panel.approved {
+      border-color: var(--success);
+      background: rgba(72,187,120,.07);
+    }
+    /* rejected → yellow */
+    .feedback-panel.rejected {
+      border-color: var(--warning);
+      background: rgba(236,201,75,.08);
+    }
+
+    .feedback-header {
+      padding: 14px 18px 12px;
+      display: flex; align-items: center; gap: 10px;
+      font-family: var(--font-display);
+      font-size: .8rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .5px;
+    }
+    .approved .feedback-header { color: #276749; background: rgba(72,187,120,.12); }
+    .rejected .feedback-header { color: #744210; background: rgba(236,201,75,.15); }
+
+    .feedback-icon {
+      width: 28px; height: 28px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .approved .feedback-icon { background: var(--success); }
+    .rejected .feedback-icon { background: var(--warning); }
+    .feedback-icon svg { color: #fff; }
+
+    .feedback-body {
+      padding: 14px 18px 18px;
+    }
+    .feedback-message {
+      font-size: 1.05rem;
+      line-height: 1.65;
+      color: var(--text);
+      margin-bottom: 12px;
+    }
+    .feedback-meta {
+      display: flex; gap: 16px; flex-wrap: wrap;
+    }
+    .meta-chip {
+      display: flex; align-items: center; gap: 6px;
+      font-family: var(--font-display);
+      font-size: .7rem;
+      color: var(--muted);
+    }
+    .meta-chip strong { color: var(--text); }
+
+    /* confidence bar */
+    .confidence-wrap {
+      margin-top: 14px;
+      padding-top: 14px;
+      border-top: 1px solid var(--border);
+    }
+    .confidence-label {
+      font-family: var(--font-display);
+      font-size: .7rem;
+      color: var(--muted);
+      margin-bottom: 6px;
+      display: flex; justify-content: space-between;
+    }
+    .confidence-track {
+      height: 8px;
+      background: var(--border);
+      border-radius: 99px;
+      overflow: hidden;
+    }
+    .confidence-fill {
+      height: 100%;
+      border-radius: 99px;
+      transition: width .8s var(--ease);
+    }
+    .approved .confidence-fill { background: var(--success); }
+    .rejected .confidence-fill { background: var(--warning); }
+  </style>
+</head>
+<body>
+
+  <!-- Page header -->
+  <header class="page-header">
+    <div class="logo-icon">
+      <svg width="22" height="22" viewBox="0 0 100 100" fill="none">
+        <circle cx="50" cy="50" r="35" stroke="currentColor" stroke-width="6"/>
+        <path d="M35 50L45 60L65 40" stroke="currentColor" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
+    <h1>Goal<span>Flow</span></h1>
+    <button class="back-btn" onclick="history.back()">
+      <svg width="14" height="14" fill="none" viewBox="0 0 20 20">
+        <path d="M16 10H4M8 14l-4-4 4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+      Quay lại
+    </button>
+  </header>
+
+  <!-- Main card -->
+  <div class="card">
+
+    <!-- Goal banner -->
+    <div class="card-band">
+      <p class="goal-label">📌 Mục tiêu hiện tại</p>
+      <p class="goal-title" id="goal-title-display">Học lập trình Node.js & xây dựng REST API hoàn chỉnh trong 3 tháng</p>
+      <div class="progress-bar-wrap">
+        <div class="progress-bar-fill" id="progress-fill" style="width:0%"></div>
+      </div>
+      <p class="progress-text" id="progress-text">0 / 5 milestone hoàn thành</p>
+    </div>
+
+    <!-- Card body -->
+    <div class="card-body">
+
+      <!-- ① Milestone list -->
+      <p class="section-label">① Milestone hôm nay</p>
+      <div class="milestone-list" id="milestone-list">
+        <!-- injected by JS -->
+      </div>
+
+      <!-- ② Diary -->
+      <p class="section-label">② Nhật ký thực hiện</p>
+      <div class="diary-wrap">
+        <textarea
+          id="diary-input"
+          class="diary-textarea"
+          maxlength="1000"
+          placeholder="Mô tả chi tiết những gì bạn đã làm hôm nay — thời gian, kết quả cụ thể, số liệu đạt được, khó khăn gặp phải..."
+        ></textarea>
+        <p class="char-count" id="char-count">0 / 1000 ký tự</p>
+      </div>
+
+      <!-- ③ Submit -->
+      <button class="btn-submit" id="submit-btn" onclick="handleSubmit()">
+        <svg class="btn-icon-static" width="18" height="18" fill="none" viewBox="0 0 24 24">
+          <path d="M12 2l3 6 7 1-5 5 1 7-6-3-6 3 1-7L3 9l7-1 2-6z"
+                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <div class="spinner"></div>
+        <span id="submit-label">Gửi cho AI thẩm định</span>
+      </button>
+
+      <!-- ④ AI Feedback -->
+      <div class="feedback-panel" id="feedback-panel">
+        <div class="feedback-header">
+          <div class="feedback-icon" id="feedback-icon">
+            <!-- icon injected by JS -->
+          </div>
+          <span id="feedback-title">Kết quả thẩm định</span>
+        </div>
+        <div class="feedback-body">
+          <p class="feedback-message" id="feedback-message"></p>
+          <div class="feedback-meta">
+            <div class="meta-chip">
+              🕐 <span id="feedback-time"></span>
+            </div>
+            <div class="meta-chip">
+              ✅ Milestone: <strong id="feedback-milestone-count"></strong>
+            </div>
+          </div>
+          <div class="confidence-wrap">
+            <div class="confidence-label">
+              <span>Điểm tin cậy (Confidence Score)</span>
+              <strong id="confidence-value">0%</strong>
+            </div>
+            <div class="confidence-track">
+              <div class="confidence-fill" id="confidence-fill" style="width:0%"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /card-body -->
+  </div><!-- /card -->
+
+  <script>
+    // ── Sample data (thay bằng API call thực) ──────────────────
+    const MILESTONES = [
+      { id: 1, task: 'Đọc tài liệu Express.js Routing (Ch.3)',   isDone: false },
+      { id: 2, task: 'Viết middleware xác thực JWT',             isDone: false },
+      { id: 3, task: 'Thiết kế schema Mongoose cho User model',  isDone: false },
+      { id: 4, task: 'Viết unit test cho endpoint /api/login',   isDone: false },
+      { id: 5, task: 'Đẩy code lên GitHub với commit message rõ ràng', isDone: false },
+    ];
+
+    // ── Render milestone list ──────────────────────────────────
+    const listEl = document.getElementById('milestone-list');
+
+    function renderMilestones() {
+      listEl.innerHTML = '';
+      MILESTONES.forEach((m, i) => {
+        const div = document.createElement('div');
+        div.className = 'milestone-item' + (m.isDone ? ' done' : '');
+        div.setAttribute('role', 'checkbox');
+        div.setAttribute('aria-checked', String(m.isDone));
+        div.setAttribute('tabindex', '0');
+        div.id = `milestone-${m.id}`;
+        div.innerHTML = `
+          <div class="m-check">
+            <svg width="13" height="13" fill="none" viewBox="0 0 16 16">
+              <path d="M3 8l4 4 6-7" stroke="white" stroke-width="2.2"
+                    stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <span class="milestone-task">${m.task}</span>
+          <span class="milestone-badge">${m.isDone ? 'Hoàn thành' : `#${i + 1}`}</span>
+        `;
+        div.addEventListener('click', () => toggleMilestone(i));
+        div.addEventListener('keydown', e => { if (e.key === ' ' || e.key === 'Enter') toggleMilestone(i); });
+        listEl.appendChild(div);
+      });
+      updateProgress();
+    }
+
+    function toggleMilestone(idx) {
+      MILESTONES[idx].isDone = !MILESTONES[idx].isDone;
+      renderMilestones();
+    }
+
+    function updateProgress() {
+      const done  = MILESTONES.filter(m => m.isDone).length;
+      const total = MILESTONES.length;
+      const pct   = Math.round((done / total) * 100);
+      document.getElementById('progress-fill').style.width = pct + '%';
+      document.getElementById('progress-text').textContent =
+        `${done} / ${total} milestone hoàn thành`;
+    }
+
+    // ── Char counter ───────────────────────────────────────────
+    const diaryEl   = document.getElementById('diary-input');
+    const charEl    = document.getElementById('char-count');
+    diaryEl.addEventListener('input', () => {
+      const len = diaryEl.value.length;
+      charEl.textContent = `${len} / 1000 ký tự`;
+      charEl.classList.toggle('warn', len > 800);
+    });
+
+    // ── Handle submit ──────────────────────────────────────────
+    async function handleSubmit() {
+      const diary       = diaryEl.value.trim();
+      const doneCount   = MILESTONES.filter(m => m.isDone).length;
+      const submitBtn   = document.getElementById('submit-btn');
+      const submitLabel = document.getElementById('submit-label');
+      const panel       = document.getElementById('feedback-panel');
+
+      // Reset feedback
+      panel.className = 'feedback-panel';
+
+      // ── Loading state ──
+      submitBtn.disabled = true;
+      submitBtn.classList.add('loading');
+      submitLabel.textContent = 'AI đang phân tích…';
+
+      try {
+        // Gọi backend thực tế:
+        // const res = await fetch('/api/goals/:id/verify', {
+        //   method: 'POST',
+        //   headers: { 'Content-Type': 'application/json',
+        //              'Authorization': 'Bearer ' + token },
+        //   body: JSON.stringify({
+        //     goalDescription: document.getElementById('goal-title-display').textContent,
+        //     userReport: diary
+        //   })
+        // });
+        // const result = await res.json();
+
+        // ── MOCK (xoá khi tích hợp backend) ──
+        const result = await mockGroqCall(diary, doneCount);
+
+        showFeedback(result, doneCount);
+
+      } catch (err) {
+        showFeedback({
+          approved: false,
+          message: 'Không thể kết nối đến máy chủ. Vui lòng thử lại sau.',
+          confidenceScore: 0
+        }, doneCount);
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.classList.remove('loading');
+        submitLabel.textContent = 'Gửi cho AI thẩm định';
+      }
+    }
+
+    // ── Mock API – mô phỏng logic AI ──────────────────────────
+    function mockGroqCall(diary, doneCount) {
+      return new Promise(resolve => {
+        setTimeout(() => {
+          const isVague = diary.length < 60 ||
+            /^(xong|hoàn thành|đã làm|done|ok|okay|xong rồi|tôi đã làm xong)[\s.!]*$/i.test(diary);
+
+          if (isVague) {
+            resolve({
+              approved: false,
+              message: 'Chưa đủ bằng chứng, hãy mô tả chi tiết bạn đã làm gì — ví dụ: thời gian thực hiện, kết quả đạt được, số liệu cụ thể hoặc hành động thực tế.',
+              confidenceScore: 0.08
+            });
+          } else if (doneCount === 0) {
+            resolve({
+              approved: false,
+              message: 'Bạn chưa đánh dấu hoàn thành milestone nào. Hãy tick vào những bước đã thực hiện trước khi gửi báo cáo.',
+              confidenceScore: 0.25
+            });
+          } else if (diary.length >= 150 && doneCount >= 2) {
+            resolve({
+              approved: true,
+              message: `Báo cáo của bạn có độ chi tiết tốt và khớp với mục tiêu đề ra. Bạn đã hoàn thành ${doneCount} milestone, thể hiện tiến độ rõ ràng. Tiếp tục phát huy!`,
+              confidenceScore: 0.72 + Math.min(doneCount * 0.04, 0.2)
+            });
+          } else {
+            resolve({
+              approved: false,
+              message: 'Báo cáo có nội dung nhưng chưa đủ chi tiết hoặc chưa đủ số milestone. Hãy bổ sung kết quả cụ thể hoặc hoàn thành thêm các bước.',
+              confidenceScore: 0.42
+            });
+          }
+        }, 2200);
+      });
+    }
+
+    // ── Render feedback panel ──────────────────────────────────
+    function showFeedback(result, doneCount) {
+      const panel    = document.getElementById('feedback-panel');
+      const iconEl   = document.getElementById('feedback-icon');
+      const titleEl  = document.getElementById('feedback-title');
+      const msgEl    = document.getElementById('feedback-message');
+      const timeEl   = document.getElementById('feedback-time');
+      const mileEl   = document.getElementById('feedback-milestone-count');
+      const confVal  = document.getElementById('confidence-value');
+      const confFill = document.getElementById('confidence-fill');
+
+      const pct = Math.round(result.confidenceScore * 100);
+      const type = result.approved ? 'approved' : 'rejected';
+
+      // set class
+      panel.className = `feedback-panel show ${type}`;
+
+      // icon
+      iconEl.innerHTML = result.approved
+        ? `<svg width="16" height="16" fill="none" viewBox="0 0 20 20">
+             <path d="M4 10l5 5 7-8" stroke="white" stroke-width="2.2"
+                   stroke-linecap="round" stroke-linejoin="round"/>
+           </svg>`
+        : `<svg width="16" height="16" fill="none" viewBox="0 0 20 20">
+             <path d="M10 5v6M10 14v.5" stroke="white" stroke-width="2.2"
+                   stroke-linecap="round"/>
+           </svg>`;
+
+      titleEl.textContent = result.approved
+        ? '🎉 AI đã xác nhận tiến độ của bạn!'
+        : '⚠️ Cần bổ sung thêm thông tin';
+
+      msgEl.textContent    = result.message;
+      timeEl.textContent   = new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+      mileEl.textContent   = `${doneCount} / ${MILESTONES.length}`;
+      confVal.textContent  = `${pct}%`;
+
+      // Animate bar (delay để transition có hiệu lực)
+      confFill.style.width = '0%';
+      setTimeout(() => { confFill.style.width = pct + '%'; }, 80);
+
+      // Scroll vào view
+      panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    // ── Init ───────────────────────────────────────────────────
+    renderMilestones();
+  </script>
+</body>
+</html>

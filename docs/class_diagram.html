@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <title>Biểu đồ Lớp - GoalFlow</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <style>
+        body {
+            font-family: 'Times New Roman', Times, serif; /* Font chữ giống báo cáo */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #ffffff;
+            padding: 20px;
+        }
+        .instructions {
+            background: #f8f9fa;
+            padding: 15px 30px;
+            border-radius: 8px;
+            border: 1px solid #dee2e6;
+            margin-bottom: 30px;
+            max-width: 800px;
+            text-align: justify;
+            font-family: Arial, sans-serif;
+        }
+        .caption {
+            font-size: 18px;
+            font-weight: bold;
+            font-style: italic;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="instructions">
+        <h3 style="margin-top: 0;">Ghi chú dành cho bạn:</h3>
+        <p>Hình mẫu bạn gửi là <strong>Biểu đồ lớp thực thể (Entity Class Diagram)</strong> của một hệ thống Bán hàng (E-commerce) nên có rất nhiều bảng (Cart, Product, Address...).</p>
+        <p>Hệ thống <strong>GoalFlow</strong> của bạn tập trung vào quản lý mục tiêu, nên về mặt CSDL chỉ có 2 thực thể chính là <strong>User</strong> và <strong>Goal</strong>. Nếu chỉ vẽ 2 ô thì biểu đồ sẽ rất trống trải và không thể hiện được độ phức tạp của đồ án.</p>
+        <p>Vì vậy, mình đã thiết kế biểu đồ này bao gồm cả Thực thể (Entities) và các Lớp Xử lý (Controllers/Services như AI, Email) để biểu đồ trông <strong>hoành tráng, chuyên nghiệp và đúng với kiến trúc hệ thống của bạn</strong>. Màu sắc cũng được phối xanh dương y hệt như hình bạn yêu cầu.</p>
+        <p>👉 <strong>Cách dùng:</strong> Bạn chỉ cần <strong>chụp ảnh màn hình</strong> phần biểu đồ bên dưới và dán vào file Word báo cáo nhé!</p>
+    </div>
+
+    <!-- Vùng chứa biểu đồ -->
+    <div class="mermaid">
+        %%{init: {
+          'theme': 'base',
+          'themeVariables': {
+            'primaryColor': '#5bc0de',     /* Màu nền xanh dương nhạt giống ảnh */
+            'primaryBorderColor': '#000000',
+            'primaryTextColor': '#000000',
+            'lineColor': '#000000',
+            'fontFamily': 'Arial',
+            'fontSize': '14px'
+          }
+        }}%%
+        classDiagram
+            class User {
+                -String id
+                -String name
+                -String email
+                -String password
+                -Date createdAt
+                +saveUser()
+                +getUserInfo()
+                +login()
+            }
+            
+            class Goal {
+                -String id
+                -String title
+                -String description
+                -String category
+                -Date deadline
+                -String priority
+                -String status
+                -String userId
+                -Date createdAt
+                +saveGoal()
+                +updateGoal()
+                +deleteGoal()
+                +markCompleted()
+            }
+
+            class AuthController {
+                -String secretKey
+                +registerUser(req, res)
+                +loginUser(req, res)
+                +changePassword(req, res)
+                +resetPassword(req, res)
+            }
+
+            class GoalController {
+                +createGoal(req, res)
+                +getUserGoals(req, res)
+            }
+
+            class AIService {
+                -String apiKey
+                -String apiUrl
+                +callGroqAPI(messages)
+                +generateGoals(chatHistory)
+            }
+
+            class EmailService {
+                -String emailUser
+                -String emailPass
+                +sendWelcomeEmail(email)
+                +sendCompletionEmail(email, goal)
+                +sendPasswordReset(email, newPass)
+            }
+
+            class ApplicationUI {
+                -Object AppState
+                +initializeApp()
+                +renderGoals()
+                +handleChatSubmit()
+                +switchTab()
+            }
+
+            %% Các đường liên kết (Quan hệ)
+            User "1" -- "0..*" Goal : creates / manages
+            AuthController --> User : authenticates
+            GoalController --> Goal : manages
+            ApplicationUI --> AuthController : calls API
+            ApplicationUI --> GoalController : calls API
+            ApplicationUI --> AIService : requests AI
+            GoalController --> EmailService : triggers
+            AuthController --> EmailService : triggers
+    </div>
+
+    <div class="caption">Hình X. Biểu đồ lớp hệ thống GoalFlow</div>
+
+    <script>
+        // Khởi tạo Mermaid để tự động vẽ biểu đồ
+        mermaid.initialize({ startOnLoad: true });
+    </script>
+</body>
+</html>
