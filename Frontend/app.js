@@ -9,7 +9,9 @@ const AppState = {
     currentSessionId: null
 };
 
-const API_URL = 'http://localhost:3000/api';
+const API_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+    ? 'http://localhost:3000/api'
+    : '/api';
 
 // Hằng số session timeout — dùng chung cho cả checkExistingUser và monitor
 const SESSION_TIMEOUT_MS = 30 * 60 * 1000; // 30 phút
