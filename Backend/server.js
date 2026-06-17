@@ -1,4 +1,4 @@
-const express = require('express');
+﻿const express = require('express');
 const cors = require('cors');
 const fs = require('fs').promises;
 const path = require('path');
@@ -18,6 +18,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Middleware
+app.set('trust proxy', 1); // Render dùng reverse proxy
 app.use(cors({
     origin: process.env.CORS_ORIGIN || '*',
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
@@ -66,7 +67,10 @@ async function connectDB() {
 
 // Nodemailer Configuration
 const transporter = nodemailer.createTransport({
-    service: 'gmail',
+    host: 'smtp.gmail.com',
+    port: 465,
+    secure: true,
+    family: 4,
     auth: {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASSWORD
@@ -75,25 +79,17 @@ const transporter = nodemailer.createTransport({
 
 async function sendWelcomeEmail(toEmail, userName) {
     const mailOptions = {
-        from: `"GoalFlow Team" <${process.env.EMAIL_USER}>`,
+        from: '"GoalFlow Team" <' + process.env.EMAIL_USER + '>',
         to: toEmail,
-        subject: 'Chào mừng bạn đến với GoalFlow',
-        text: `Chào bạn,
-
-Cảm ơn bạn đã tin tưởng và sử dụng website GoalFlow để quản lý mục tiêu cá nhân của mình. Chúng tôi tạo ra nền tảng này với mong muốn giúp bạn biến những kế hoạch trên giấy thành hành động thực tế mỗi ngày.
-
-Nếu bạn có bất kỳ góp ý hoặc cần hỗ trợ, hãy phản hồi lại email này. Đội ngũ của chúng tôi luôn sẵn sàng đồng hành cùng bạn trên hành trình chinh phục mục tiêu.
-
-Chúc bạn một ngày làm việc hiệu quả và đầy động lực!
-
-Trân trọng.`
+        subject: 'Chao mung ban den voi GoalFlow',
+        text: 'Chao ban,\n\nCam on ban da tin tuong va su dung website GoalFlow de quan ly muc tieu ca nhan cua minh. Chung toi tao ra nen tang nay voi mong muon giup ban bien nhung ke hoach tren giay thanh hanh dong thuc te moi ngay.\n\nNeu ban co bat ky gop y hoac can ho tro, hay phan hoi lai email nay. Doi ngu cua chung toi luon san sang dong hanh cung ban tren hanh trinh chinh phuc muc tieu.\n\nChuc ban mot ngay lam viec hieu qua va day dong luc!\n\nTran trong.'
     };
 
     try {
         await transporter.sendMail(mailOptions);
-        console.log(`✅ Welcome email sent to ${toEmail}`);
+        console.log('Welcome email sent to ' + toEmail);
     } catch (error) {
-        console.error(`❌ Error sending email to ${toEmail}:`, error.message);
+        console.error('Error sending email to ' + toEmail + ':', error.message);
     }
 }
 
@@ -103,16 +99,16 @@ app.post('/api/auth/register', async (req, res) => {
         const { name, email, password } = req.body;
 
         if (!email || !email.toLowerCase().endsWith('@gmail.com')) {
-            return res.status(400).json({ success: false, error: 'Chỉ chấp nhận địa chỉ @gmail.com' });
+            return res.status(400).json({ success: false, error: 'Chi chap nhan dia chi @gmail.com' });
         }
         
         if (!password || password.length < 6) {
-            return res.status(400).json({ success: false, error: 'Mật khẩu phải từ 6 ký tự trở lên' });
+            return res.status(400).json({ success: false, error: 'Mat khau phai tu 6 ky tu tro len' });
         }
 
         let user = await User.findOne({ email });
         if (user) {
-            return res.status(400).json({ success: false, error: 'Email đã được đăng ký' });
+            return res.status(400).json({ success: false, error: 'Email da duoc dang ky' });
         }
 
         const salt = await bcrypt.genSalt(10);
@@ -126,16 +122,17 @@ app.post('/api/auth/register', async (req, res) => {
             createdAt: new Date().toISOString()
         });
 
-        // Gửi email chào mừng chạy ngầm
+        // Gui email chao mung chay ngam
         sendWelcomeEmail(email, name).catch(console.error);
 
-        res.json({ success: true, message: 'Đăng ký thành công. Vui lòng đăng nhập.' });
+        res.json({ success: true, message: 'Dang ky thanh cong. Vui long dang nhap.' });
     } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
 app.post('/api/auth/login', async (req, res) => {
     try {
         const { email, password } = req.body;
+
 
         const user = await User.findOne({ email });
         if (!user) {
@@ -419,7 +416,26 @@ app.post('/api/ai/chat', authMiddleware, async (req, res) => {
 
         const systemPrompt = {
             role: "system",
-            content: `Bạn là trợ lý GoalFlow. Trả lời ngắn gọn, thân thiện bằng tiếng Việt. Luôn đặt câu hỏi để làm rõ mục tiêu. Hôm nay là ngày ${currentDateStr}.`
+            content: `Bạn là chuyên gia AI đồng hành quản trị hiệu suất cá nhân, tích hợp trong hệ thống GoalFlow. Hôm nay là ngày ${currentDateStr}.
+
+NHIỆM VỤ CHÍNH:
+Khi người dùng nhập một mục tiêu lớn (ví dụ: "Học Node.js trong 1 tháng", "Giảm 3kg", "Tìm việc mới"), bạn phải phân tích và phân rã mục tiêu đó thành các hành động cụ thể (Sub-tasks/Milestones).
+
+QUY TẮC PHẢN HỒI:
+1. KHÔNG trả về lời mở đầu hay lời kết dài dòng.
+2. Trả lời ngắn gọn, thân thiện bằng tiếng Việt.
+3. Khi phân rã mục tiêu, trả về dưới dạng các gạch đầu dòng rõ ràng, mỗi dòng là một hành động có thể thực hiện được (Actionable task).
+4. Mỗi mục tiêu lớn chia thành tối đa 5 đến 7 task nhỏ.
+5. Mỗi task bắt đầu bằng ký hiệu "[ ] " để người dùng dễ dàng theo dõi.
+6. Nếu câu hỏi của người dùng chưa rõ ràng hoặc chưa phải là mục tiêu cụ thể, hãy đặt câu hỏi ngắn gọn để làm rõ.
+7. Sau danh sách task, có thể thêm 1 dòng ngắn gợi ý khung thời gian phù hợp nếu người dùng chưa đề cập.
+
+VÍ DỤ PHẢN HỒI KHI NHẬN MỤC TIÊU:
+[ ] Tìm hiểu cơ bản về Node.js và cách cài đặt môi trường NPM.
+[ ] Xây dựng HTTP Server đơn giản bằng Express.js.
+[ ] Kết nối cơ sở dữ liệu MongoDB và thực hiện các thao tác CRUD.
+[ ] Xây dựng REST API hoàn chỉnh với xác thực JWT.
+[ ] Deploy ứng dụng lên Render hoặc Vercel.`
         };
 
         const messages = [systemPrompt, ...recentHistory, { role: "user", content: message }];
