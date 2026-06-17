@@ -1,4 +1,4 @@
-const AppState = {
+﻿const AppState = {
     currentScreen: 'welcome',
     user: null,
     goals: [],
@@ -1040,7 +1040,14 @@ function addMessageToChat(role, content) {
 
     // Escape HTML để chống XSS
     const safeName = role === 'user' ? escapeHtml(AppState.user.name.charAt(0).toUpperCase()) : 'AI';
-    const safeContent = escapeHtml(content).replace(/\n/g, '<br>');
+        // Format AI response: render [ ] checklist items as interactive checkboxes
+    let safeContent = escapeHtml(content);
+    if (role === 'ai') {
+        // Convert [ ] task items into styled checkboxes
+        safeContent = safeContent.replace(/\[ \] /g, '<span class="ai-task-checkbox">☐</span> ');
+        safeContent = safeContent.replace(/\[x\] /gi, '<span class="ai-task-checkbox checked">☑</span> ');
+    }
+    safeContent = safeContent.replace(/\n/g, '<br>');
 
     messageDiv.innerHTML = `
         <div class="message-avatar">${safeName}</div>

@@ -2728,3 +2728,31 @@ body.dark-mode .choice-card:hover .card-arrow {
     transition: width .9s cubic-bezier(.4,0,.2,1);
     background: linear-gradient(90deg, #667EEA, #48BB78);
 }
+
+/* AI Task Checklist Styling */
+.ai-task-checkbox {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    font-size: 16px;
+    line-height: 1;
+    color: var(--accent-color);
+    vertical-align: middle;
+    margin-right: 4px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border-radius: 3px;
+}
+.ai-task-checkbox:hover {
+    transform: scale(1.2);
+    color: var(--success-color);
+}
+.ai-task-checkbox.checked {
+    color: var(--success-color);
+}
+
+.ai-message .message-content br + .ai-task-checkbox {
+    margin-top: 4px;
+}
