@@ -25,6 +25,22 @@ const userSchema = new mongoose.Schema(
             default: 0,
             min: 0,
         },
+
+        // ── Admin flag ───────────────────────────────────────
+        isAdmin: {
+            type: Boolean,
+            default: false,
+        },
+
+        // ── Ban status ───────────────────────────────────────
+        isBanned: {
+            type: Boolean,
+            default: false,
+        },
+        bannedAt: {
+            type: Date,
+            default: null,
+        },
     },
     { timestamps: true }
 );

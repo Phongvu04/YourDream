@@ -1,4 +1,4 @@
-﻿const express = require('express');
+const express = require('express');
 const cors = require('cors');
 const fs = require('fs').promises;
 const path = require('path');
@@ -13,6 +13,7 @@ const User = require('./models/User');
 const Goal = require('./models/Goal');
 const ChatSession = require('./models/ChatSession');
 const authMiddleware = require('./middleware/auth');
+const adminMiddleware = require('./middleware/auth-admin');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -137,6 +138,10 @@ app.post('/api/auth/login', async (req, res) => {
         const user = await User.findOne({ email });
         if (!user) {
             return res.status(400).json({ success: false, error: 'Tài khoản không tồn tại' });
+        }
+
+        if (user.isBanned) {
+            return res.status(403).json({ success: false, error: 'Tài khoản của bạn đã bị khóa. Vui lòng liên hệ quản trị viên.' });
         }
 
         const isMatch = await bcrypt.compare(password, user.password);
@@ -1014,6 +1019,240 @@ Trân trọng,
         console.error(`❌ Lỗi gửi thông báo completion:`, error.message);
         res.status(500).json({ success: false, error: error.message });
     }
+});
+
+// ═══════════════════════════════════════════════════════════════
+// ADMIN ROUTES — /api/admin/*
+// ═══════════════════════════════════════════════════════════════
+
+// [ADMIN] Đăng nhập Admin
+app.post('/api/admin/login', async (req, res) => {
+    try {
+        const { email, password } = req.body;
+        if (!email || !password) {
+            return res.status(400).json({ success: false, error: 'Vui lòng nhập email và mật khẩu' });
+        }
+        const user = await User.findOne({ email });
+        if (!user || !user.isAdmin) {
+            return res.status(403).json({ success: false, error: 'Tài khoản không có quyền Admin' });
+        }
+        const isMatch = await bcrypt.compare(password, user.password);
+        if (!isMatch) {
+            return res.status(400).json({ success: false, error: 'Mật khẩu không chính xác' });
+        }
+        const token = jwt.sign({ id: user.id, email: user.email }, process.env.JWT_SECRET, { expiresIn: '7d' });
+
+        res.json({ success: true, token, user: { id: user.id, name: user.name, email: user.email, isAdmin: user.isAdmin || false } });
+    } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+// [ADMIN] Thống kê tổng quan
+app.get('/api/admin/stats', adminMiddleware, async (req, res) => {
+    try {
+        const now = new Date();
+        const weekAgo = new Date(now - 7 * 24 * 60 * 60 * 1000);
+
+        const [totalUsers, newUsersThisWeek, totalGoals, totalChats,
+            activeGoals, completedGoals, abandonedGoals, checkingGoals] = await Promise.all([
+            User.countDocuments({ isAdmin: { $ne: true } }),
+            User.countDocuments({ isAdmin: { $ne: true }, createdAt: { $gte: weekAgo.toISOString() } }),
+            Goal.countDocuments(),
+            ChatSession.countDocuments(),
+            Goal.countDocuments({ status: 'active' }),
+            Goal.countDocuments({ status: 'completed' }),
+            Goal.countDocuments({ status: 'abandoned' }),
+            Goal.countDocuments({ status: 'checking' }),
+        ]);
+
+        const recentUsers = await User.find({ isAdmin: { $ne: true } })
+            .select('name email trustScore createdAt isBanned')
+            .sort({ createdAt: -1 }).limit(5);
+
+        const recentGoals = await Goal.find()
+            .select('title status priority createdAt userId')
+            .sort({ createdAt: -1 }).limit(5);
+
+        res.json({
+            success: true,
+            stats: {
+                totalUsers, newUsersThisWeek, totalGoals, totalChats,
+                goalsByStatus: { active: activeGoals, completed: completedGoals, abandoned: abandonedGoals, checking: checkingGoals },
+                recentUsers, recentGoals
+            }
+        });
+    } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+// [ADMIN] Danh sách users (phân trang + tìm kiếm)
+app.get('/api/admin/users', adminMiddleware, async (req, res) => {
+    try {
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 15;
+        const search = req.query.search || '';
+        const skip = (page - 1) * limit;
+
+        const filter = { isAdmin: { $ne: true } };
+        if (search) {
+            filter.$or = [
+                { name: { $regex: search, $options: 'i' } },
+                { email: { $regex: search, $options: 'i' } }
+            ];
+        }
+
+        const [users, total] = await Promise.all([
+            User.find(filter).select('-password').sort({ createdAt: -1 }).skip(skip).limit(limit),
+            User.countDocuments(filter)
+        ]);
+
+        // Đếm số goals của mỗi user
+        const usersWithGoals = await Promise.all(users.map(async u => {
+            const goalCount = await Goal.countDocuments({ userId: u.id });
+            return { ...u.toObject(), goalCount };
+        }));
+
+        res.json({ success: true, users: usersWithGoals, total, page, pages: Math.ceil(total / limit) });
+    } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+// [ADMIN] Xóa user
+app.delete('/api/admin/users/:id', adminMiddleware, async (req, res) => {
+    try {
+        const { id } = req.params;
+        await Goal.deleteMany({ userId: id });
+        await ChatSession.deleteMany({ userId: id });
+        await User.deleteOne({ id });
+        res.json({ success: true, message: 'Đã xóa người dùng và toàn bộ dữ liệu' });
+    } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+// [ADMIN] Cập nhật Trust Score
+app.patch('/api/admin/users/:id/trust-score', adminMiddleware, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { trustScore } = req.body;
+        if (typeof trustScore !== 'number' || trustScore < 0 || trustScore > 200) {
+            return res.status(400).json({ success: false, error: 'Trust Score phải từ 0 đến 200' });
+        }
+        await User.findOneAndUpdate({ id }, { $set: { trustScore } });
+        res.json({ success: true, message: `Đã cập nhật Trust Score thành ${trustScore}` });
+    } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+// [ADMIN] Khóa / Mở khóa tài khoản
+app.patch('/api/admin/users/:id/ban', adminMiddleware, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const user = await User.findOne({ id });
+        if (!user) return res.status(404).json({ success: false, error: 'Không tìm thấy người dùng' });
+        const newBanned = !user.isBanned;
+        await User.findOneAndUpdate({ id }, { $set: { isBanned: newBanned, bannedAt: newBanned ? new Date() : null } });
+        res.json({ success: true, isBanned: newBanned, message: newBanned ? 'Đã khóa tài khoản' : 'Đã mở khóa tài khoản' });
+    } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+// [ADMIN] Danh sách tất cả Goals
+app.get('/api/admin/goals', adminMiddleware, async (req, res) => {
+    try {
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 15;
+        const status = req.query.status || '';
+        const search = req.query.search || '';
+        const skip = (page - 1) * limit;
+
+        const filter = {};
+        if (status && status !== 'all') filter.status = status;
+        if (search) filter.title = { $regex: search, $options: 'i' };
+
+        const [goals, total] = await Promise.all([
+            Goal.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit),
+            Goal.countDocuments(filter)
+        ]);
+
+        // Lấy tên user cho mỗi goal
+        const goalsWithUser = await Promise.all(goals.map(async g => {
+            const user = await User.findOne({ id: g.userId }).select('name email');
+            return { ...g.toObject(), userName: user ? user.name : 'Unknown', userEmail: user ? user.email : '' };
+        }));
+
+        res.json({ success: true, goals: goalsWithUser, total, page, pages: Math.ceil(total / limit) });
+    } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+// [ADMIN] Cập nhật trạng thái Goal
+app.patch('/api/admin/goals/:id/status', adminMiddleware, async (req, res) => {
+    try {
+        const { status } = req.body;
+        const validStatuses = ['active', 'checking', 'completed', 'abandoned'];
+        if (!validStatuses.includes(status)) {
+            return res.status(400).json({ success: false, error: 'Trạng thái không hợp lệ' });
+        }
+        const update = { status };
+        if (status === 'completed') update.completedAt = new Date().toISOString();
+        await Goal.findByIdAndUpdate(req.params.id, { $set: update });
+        res.json({ success: true, message: 'Đã cập nhật trạng thái mục tiêu' });
+    } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+// [ADMIN] Xóa Goal
+app.delete('/api/admin/goals/:id', adminMiddleware, async (req, res) => {
+    try {
+        await Goal.findByIdAndDelete(req.params.id);
+        res.json({ success: true, message: 'Đã xóa mục tiêu' });
+    } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+// [ADMIN] Danh sách Chat Sessions
+app.get('/api/admin/chats', adminMiddleware, async (req, res) => {
+    try {
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 15;
+        const search = req.query.search || '';
+        const skip = (page - 1) * limit;
+
+        const filter = {};
+        if (search) filter.title = { $regex: search, $options: 'i' };
+
+        const [chats, total] = await Promise.all([
+            ChatSession.find(filter).sort({ updatedAt: -1 }).skip(skip).limit(limit),
+            ChatSession.countDocuments(filter)
+        ]);
+
+        const chatsWithUser = await Promise.all(chats.map(async c => {
+            const user = await User.findOne({ id: c.userId }).select('name email');
+            return {
+                _id: c._id, title: c.title, userId: c.userId,
+                messageCount: c.messages.length,
+                userName: user ? user.name : 'Unknown',
+                userEmail: user ? user.email : '',
+                createdAt: c.createdAt, updatedAt: c.updatedAt
+            };
+        }));
+
+        res.json({ success: true, chats: chatsWithUser, total, page, pages: Math.ceil(total / limit) });
+    } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+// [ADMIN] Chi tiết một Chat Session
+app.get('/api/admin/chats/:id', adminMiddleware, async (req, res) => {
+    try {
+        const chat = await ChatSession.findById(req.params.id);
+        if (!chat) return res.status(404).json({ success: false, error: 'Không tìm thấy cuộc trò chuyện' });
+        const user = await User.findOne({ id: chat.userId }).select('name email');
+        res.json({ success: true, chat: { ...chat.toObject(), userName: user ? user.name : 'Unknown' } });
+    } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+// [ADMIN] Xóa Chat Session
+app.delete('/api/admin/chats/:id', adminMiddleware, async (req, res) => {
+    try {
+        await ChatSession.findByIdAndDelete(req.params.id);
+        res.json({ success: true, message: 'Đã xóa cuộc trò chuyện' });
+    } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+// ─── Phục vụ trang Admin ───────────────────────────────────────
+app.get('/admin', (req, res) => {
+    res.sendFile(path.join(__dirname, '../Frontend/admin.html'));
 });
 
 // Cho phép Express đọc các file tĩnh (như styles.css)

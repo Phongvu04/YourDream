@@ -1,4 +1,4 @@
-﻿const AppState = {
+const AppState = {
     currentScreen: 'welcome',
     user: null,
     goals: [],
@@ -783,6 +783,12 @@ function updateUserDisplay() {
         
         const profileEmail = document.getElementById('profile-email');
         if (profileEmail) profileEmail.textContent = AppState.user.email;
+
+        // Hiện nút Admin nếu user là admin
+        if (AppState.user.isAdmin) {
+            const adminLink = document.getElementById('nav-admin-link');
+            if (adminLink) adminLink.style.display = 'flex';
+        }
     }
 }
 

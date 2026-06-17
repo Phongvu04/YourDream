@@ -2756,3 +2756,10 @@ body.dark-mode .choice-card:hover .card-arrow {
 .ai-message .message-content br + .ai-task-checkbox {
     margin-top: 4px;
 }
+
+/* ── Nút "Truy cập trang Admin" ở trang đăng nhập ─── */
+#goto-admin-btn:hover {
+    background: rgba(99,102,241,0.15) !important;
+    border-color: rgba(99,102,241,0.45) !important;
+    color: #a5b4fc !important;
+}
