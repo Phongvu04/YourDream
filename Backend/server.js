@@ -81,7 +81,7 @@ async function connectDB() {
 // Đảm bảo luôn có tài khoản Admin trong DB (RBAC)
 async function ensureAdminExists() {
     try {
-        const ADMIN_EMAIL    = process.env.ADMIN_EMAIL    || 'admin@gmail.com';
+        const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@gmail.com';
         const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '123456';
 
         // Kiểm tra theo cả 2 cách: role mới và isAdmin cũ
@@ -102,7 +102,7 @@ async function ensureAdminExists() {
             return;
         }
 
-        const salt           = await bcrypt.genSalt(10);
+        const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(ADMIN_PASSWORD, salt);
 
         // Email đó đã đăng ký bình thường → cấp quyền + đặt lại mật khẩu
@@ -119,15 +119,15 @@ async function ensureAdminExists() {
 
         // Chưa có gì → tạo mới với cả 2 field
         await User.create({
-            id:           'admin_' + Date.now(),
-            name:         'Admin',
-            email:        ADMIN_EMAIL,
-            password:     hashedPassword,
-            role:         'admin',   // ← RBAC field mới
-            isAdmin:      true,      // ← giữ lại để backward-compatible
-            trustScore:   100,
+            id: 'admin_' + Date.now(),
+            name: 'Admin',
+            email: ADMIN_EMAIL,
+            password: hashedPassword,
+            role: 'admin',   // ← RBAC field mới
+            isAdmin: true,      // ← giữ lại để backward-compatible
+            trustScore: 100,
             abandonCount: 0,
-            createdAt:    new Date().toISOString(),
+            createdAt: new Date().toISOString(),
         });
         console.log(`👑 Đã tạo tài khoản Admin mới: ${ADMIN_EMAIL}`);
     } catch (e) {
@@ -136,18 +136,23 @@ async function ensureAdminExists() {
 }
 
 // Nodemailer Configuration
-// Port 587 + STARTTLS (thay vì 465+SSL) để tránh bị Render/cloud chặn outbound
 const transporter = nodemailer.createTransport({
     host: 'smtp.gmail.com',
-    port: 587,
-    secure: false,          // false = STARTTLS (upgrade sau khi kết nối)
-    family: 4,              // Force IPv4 - tránh lỗi IPv6 trên Render
+    port: 465,            // Đổi sang port 465
+    secure: true,         // true cho port 465, false cho port 587
+    // family: 4,         // Bạn có thể giữ lại family: 4 để phòng hờ Render IPv6
     auth: {
         user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASSWORD
-    },
-    tls: {
-        rejectUnauthorized: false   // Cho phép self-signed cert trên cloud
+        pass: process.env.EMAIL_PASSWORD // Chắc chắn đây là mật khẩu ứng dụng
+    }
+});
+
+// Log để debug
+transporter.verify((err) => {
+    if (err) {
+        console.error('❌ SMTP verify failed:', err.message);
+    } else {
+        console.log('✅ SMTP ready: Gmail');
     }
 });
 
@@ -175,7 +180,7 @@ app.post('/api/auth/register', async (req, res) => {
         if (!email || !email.toLowerCase().endsWith('@gmail.com')) {
             return res.status(400).json({ success: false, error: 'Chi chap nhan dia chi @gmail.com' });
         }
-        
+
         if (!password || password.length < 6) {
             return res.status(400).json({ success: false, error: 'Mat khau phai tu 6 ky tu tro len' });
         }
@@ -188,10 +193,10 @@ app.post('/api/auth/register', async (req, res) => {
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(password, salt);
 
-        user = await User.create({ 
-            id: Date.now().toString(), 
-            name, 
-            email, 
+        user = await User.create({
+            id: Date.now().toString(),
+            name,
+            email,
             password: hashedPassword,
             createdAt: new Date().toISOString()
         });
@@ -419,7 +424,7 @@ app.post('/api/ai/chat', authMiddleware, async (req, res) => {
     try {
         const { message, history, sessionId } = req.body;
         const userId = req.user.id;
-        
+
         // Chỉ lấy 10 tin nhắn gần nhất
         const recentHistory = history.slice(-10).map(msg => ({
             role: msg.role === 'model' ? 'assistant' : msg.role,
@@ -463,13 +468,13 @@ VÍ DỤ PHẢN HỒI KHI NHẬN MỤC TIÊU:
         if (sessionId) {
             chatRecord = await ChatSession.findById(sessionId);
         }
-        
+
         if (!chatRecord) {
             // Tạo phiên mới, lấy tiêu đề từ tin nhắn đầu tiên
             const title = message.length > 30 ? message.substring(0, 30) + '...' : message;
             chatRecord = new ChatSession({ userId, title, messages: [] });
         }
-        
+
         chatRecord.messages.push({ role: 'user', content: message });
         chatRecord.messages.push({ role: 'assistant', content: reply });
         await chatRecord.save();
@@ -597,49 +602,49 @@ app.post('/api/ai/generate-goals', authMiddleware, async (req, res) => {
 
         // Helper function de parse (se duoc dinh nghia ben ngoai hoac inline)
         const parseGoals = function parseAIGoals(jsonString) {
-    try {
-        // Step 1: Clean markdown blocks if present
-        let cleaned = jsonString.trim();
-        if (cleaned.startsWith('```')) {
-            cleaned = cleaned.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
-        }
-        
-        // Step 2: Try parsing directly
-        let data;
-        try {
-            data = JSON.parse(cleaned);
-        } catch (e) {
-            // Step 3: Try to find the first { or [ and last } or ]
-            const startIdx = Math.min(
-                cleaned.indexOf('{') !== -1 ? cleaned.indexOf('{') : Infinity,
-                cleaned.indexOf('[') !== -1 ? cleaned.indexOf('[') : Infinity
-            );
-            const endIdx = Math.max(
-                cleaned.lastIndexOf('}'),
-                cleaned.lastIndexOf(']')
-            );
-            
-            if (startIdx !== Infinity && endIdx !== -1 && endIdx > startIdx) {
-                data = JSON.parse(cleaned.substring(startIdx, endIdx + 1));
-            } else {
-                throw e;
+            try {
+                // Step 1: Clean markdown blocks if present
+                let cleaned = jsonString.trim();
+                if (cleaned.startsWith('```')) {
+                    cleaned = cleaned.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
+                }
+
+                // Step 2: Try parsing directly
+                let data;
+                try {
+                    data = JSON.parse(cleaned);
+                } catch (e) {
+                    // Step 3: Try to find the first { or [ and last } or ]
+                    const startIdx = Math.min(
+                        cleaned.indexOf('{') !== -1 ? cleaned.indexOf('{') : Infinity,
+                        cleaned.indexOf('[') !== -1 ? cleaned.indexOf('[') : Infinity
+                    );
+                    const endIdx = Math.max(
+                        cleaned.lastIndexOf('}'),
+                        cleaned.lastIndexOf(']')
+                    );
+
+                    if (startIdx !== Infinity && endIdx !== -1 && endIdx > startIdx) {
+                        data = JSON.parse(cleaned.substring(startIdx, endIdx + 1));
+                    } else {
+                        throw e;
+                    }
+                }
+
+                // Step 4: Extract the array
+                if (Array.isArray(data)) return data;
+                if (data.goals && Array.isArray(data.goals)) return data.goals;
+                if (data.data && Array.isArray(data.data)) return data.data;
+
+                // If it's a single object that looks like a goal, wrap it in array
+                if (data.title || data.description) return [data];
+
+                return [];
+            } catch (err) {
+                console.error('[AI Parse Error] String:', jsonString);
+                throw new Error('Khong the doc du lieu tu AI: ' + err.message);
             }
-        }
-        
-        // Step 4: Extract the array
-        if (Array.isArray(data)) return data;
-        if (data.goals && Array.isArray(data.goals)) return data.goals;
-        if (data.data && Array.isArray(data.data)) return data.data;
-        
-        // If it's a single object that looks like a goal, wrap it in array
-        if (data.title || data.description) return [data];
-        
-        return [];
-    } catch (err) {
-        console.error('[AI Parse Error] String:', jsonString);
-        throw new Error('Khong the doc du lieu tu AI: ' + err.message);
-    }
-};
+        };
         const rawGoals = parseGoals(jsonString);
 
         if (!rawGoals || rawGoals.length === 0) {
@@ -729,7 +734,7 @@ Hãy đánh giá và trả về JSON theo đúng định dạng.`;
 
         const rawJson = await callGroqAPI([
             { role: 'system', content: systemPrompt },
-            { role: 'user',   content: userMessage }
+            { role: 'user', content: userMessage }
         ], true); // jsonMode = true
 
         // ── Parse & validate kết quả ──────────────────────────
@@ -741,7 +746,7 @@ Hãy đánh giá và trả về JSON theo đúng định dạng.`;
         }
 
         if (typeof result.approved !== 'boolean') throw new Error('Thiếu trường "approved".');
-        if (typeof result.message  !== 'string')  throw new Error('Thiếu trường "message".');
+        if (typeof result.message !== 'string') throw new Error('Thiếu trường "message".');
         if (typeof result.confidenceScore !== 'number') result.confidenceScore = result.approved ? 0.75 : 0.2;
 
         result.confidenceScore = Math.min(1, Math.max(0, Math.round(result.confidenceScore * 100) / 100));
@@ -755,14 +760,14 @@ Hãy đánh giá và trả về JSON theo đúng định dạng.`;
                 await Goal.findOneAndUpdate(
                     { id: goalId, userId: req.user.id },
                     {
-                        $set:  { aiFeedback: result.message, status: 'checking' },
+                        $set: { aiFeedback: result.message, status: 'checking' },
                         $push: {
                             verificationHistory: {
-                                note:          reportContent.trim(),
-                                proofLinks:    proofUrl ? [proofUrl] : [],
-                                reviewResult:  'approved',
+                                note: reportContent.trim(),
+                                proofLinks: proofUrl ? [proofUrl] : [],
+                                reviewResult: 'approved',
                                 reviewComment: result.message,
-                                submittedAt:   new Date()
+                                submittedAt: new Date()
                             }
                         }
                     }
@@ -821,9 +826,9 @@ Hãy đánh giá và trả về JSON theo đúng định dạng.`;
 //   canEdit: false → lý do lười biếng, đưa lời khuyên động lực
 app.post('/api/goals/:id/request-edit', authMiddleware, async (req, res) => {
     try {
-        const { id }   = req.params;
-        const userId   = req.user.id;
-        const reason   = (req.body.reason || '').trim();
+        const { id } = req.params;
+        const userId = req.user.id;
+        const reason = (req.body.reason || '').trim();
 
         if (!reason || reason.length < 10) {
             return res.status(400).json({
@@ -877,7 +882,7 @@ Hãy đánh giá và trả về JSON.`;
 
         const rawJson = await callGroqAPI([
             { role: 'system', content: systemPrompt },
-            { role: 'user',   content: userMessage }
+            { role: 'user', content: userMessage }
         ], true);
 
         let result;
@@ -895,10 +900,10 @@ Hãy đánh giá và trả về JSON.`;
         }
 
         res.json({
-            success:      true,
-            canEdit:      result.canEdit,
+            success: true,
+            canEdit: result.canEdit,
             coachMessage: result.coachMessage || '',
-            severity:     result.severity    || (result.canEdit ? 'reasonable' : 'lazy'),
+            severity: result.severity || (result.canEdit ? 'reasonable' : 'lazy'),
         });
 
     } catch (error) {
@@ -917,9 +922,9 @@ Hãy đánh giá và trả về JSON.`;
 //   3. Tăng abandonCount của User
 app.post('/api/goals/:id/abandon', authMiddleware, async (req, res) => {
     try {
-        const { id }    = req.params;            // custom goal.id từ frontend
-        const userId    = req.user.id;
-        const reason    = (req.body.reason || '').trim().slice(0, 300);
+        const { id } = req.params;            // custom goal.id từ frontend
+        const userId = req.user.id;
+        const reason = (req.body.reason || '').trim().slice(0, 300);
 
         // ── Tìm goal theo custom id + userId (bảo mật) ──────
         const goal = await Goal.findOne({ id, userId });
@@ -935,8 +940,8 @@ app.post('/api/goals/:id/abandon', authMiddleware, async (req, res) => {
         }
 
         // ── 1. Cập nhật Goal ─────────────────────────────────
-        goal.status        = 'abandoned';
-        goal.abandonedAt   = new Date();
+        goal.status = 'abandoned';
+        goal.abandonedAt = new Date();
         goal.abandonReason = reason || 'Không có lý do được ghi nhận.';
         await goal.save();
 
@@ -958,9 +963,9 @@ app.post('/api/goals/:id/abandon', authMiddleware, async (req, res) => {
         console.log(`⚑ [Abandon] User ${userId} từ bỏ goal "${goal.title}". TrustScore: ${newScore}`);
 
         res.json({
-            success:      true,
-            message:      `Mục tiêu đã được đánh dấu là từ bỏ. Trust Score của bạn còn ${newScore} điểm.`,
-            trustScore:   newScore,
+            success: true,
+            message: `Mục tiêu đã được đánh dấu là từ bỏ. Trust Score của bạn còn ${newScore} điểm.`,
+            trustScore: newScore,
             abandonCount: newCount,
         });
 
@@ -1023,7 +1028,7 @@ Trân trọng,
         transporter.sendMail(mailOptions)
             .then(() => console.log(`✅ Completion notification email sent to ${email} for goal "${goalTitle}"`))
             .catch((err) => console.error(`❌ Error sending completion email:`, err.message));
-            
+
         res.json({ success: true });
     } catch (error) {
         console.error(`❌ Lỗi gửi thông báo completion:`, error.message);
@@ -1086,15 +1091,15 @@ app.get('/api/admin/stats', adminMiddleware, async (req, res) => {
 
         const [totalUsers, newUsersThisWeek, totalGoals, totalChats,
             activeGoals, completedGoals, abandonedGoals, checkingGoals] = await Promise.all([
-            User.countDocuments({ isAdmin: { $ne: true } }),
-            User.countDocuments({ isAdmin: { $ne: true }, createdAt: { $gte: weekAgo.toISOString() } }),
-            Goal.countDocuments(),
-            ChatSession.countDocuments(),
-            Goal.countDocuments({ status: 'active' }),
-            Goal.countDocuments({ status: 'completed' }),
-            Goal.countDocuments({ status: 'abandoned' }),
-            Goal.countDocuments({ status: 'checking' }),
-        ]);
+                User.countDocuments({ isAdmin: { $ne: true } }),
+                User.countDocuments({ isAdmin: { $ne: true }, createdAt: { $gte: weekAgo.toISOString() } }),
+                Goal.countDocuments(),
+                ChatSession.countDocuments(),
+                Goal.countDocuments({ status: 'active' }),
+                Goal.countDocuments({ status: 'completed' }),
+                Goal.countDocuments({ status: 'abandoned' }),
+                Goal.countDocuments({ status: 'checking' }),
+            ]);
 
         const recentUsers = await User.find({ isAdmin: { $ne: true } })
             .select('name email trustScore createdAt isBanned')
