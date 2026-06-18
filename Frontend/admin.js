@@ -60,10 +60,38 @@ document.getElementById('admin-login-form').addEventListener('submit', async e =
     btn.disabled = false; btn.textContent = 'Đăng nhập';
 });
 
-document.getElementById('admin-logout-btn').addEventListener('click', () => {
-    localStorage.removeItem('gf_admin_token'); localStorage.removeItem('gf_admin_user');
-    S.token = null; S.user = null;
-    document.getElementById('admin-app').classList.add('hidden');
+// Nút "Quay về trang chủ" là thẻ <a href="/"> → tự điều hướng, không cần JS
+// Token admin vẫn còn trong localStorage, lần sau vào /admin sẽ auto-login
+
+// ── AUTO-LOGIN: Kiểm tra token khi trang load
+// Ưu tiên 1: token từ main app (goalflow_token) — đã có role:'admin' trong JWT
+// Ưu tiên 2: token admin riêng (gf_admin_token) từ lần đăng nhập admin trước
+window.addEventListener('DOMContentLoaded', async () => {
+    const mainToken  = localStorage.getItem('goalflow_token');
+    const mainUser   = localStorage.getItem('goalflow_user');
+    const adminToken = localStorage.getItem('gf_admin_token');
+    const adminUser  = localStorage.getItem('gf_admin_user');
+
+    // Thử dùng token từ main app trước (RBAC unified login)
+    const token = mainToken || adminToken;
+    const userRaw = mainToken ? mainUser : adminUser;
+
+    if (token && userRaw) {
+        try {
+            // Verify token còn hiệu lực bằng cách gọi API stats
+            const r = await fetch(API + '/admin/stats', {
+                headers: { 'Authorization': 'Bearer ' + token }
+            });
+            if (r.ok) {
+                // Token hợp lệ + có quyền admin → vào thẳng dashboard
+                S.token = token;
+                S.user  = JSON.parse(userRaw);
+                showDashboard();
+                return;
+            }
+        } catch (_) { /* token lỗi → hiện form đăng nhập bình thường */ }
+    }
+    // Không có token hoặc token hết hạn → hiện form đăng nhập
     document.getElementById('admin-login').style.display = 'flex';
 });
 

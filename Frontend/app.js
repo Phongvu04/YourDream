@@ -784,10 +784,12 @@ function updateUserDisplay() {
         const profileEmail = document.getElementById('profile-email');
         if (profileEmail) profileEmail.textContent = AppState.user.email;
 
-        // Hiện nút Admin nếu user là admin
-        if (AppState.user.isAdmin) {
-            const adminLink = document.getElementById('nav-admin-link');
-            if (adminLink) adminLink.style.display = 'flex';
+        // Hiện nút Admin TRONG SIDEBAR chỉ khi user có role === 'admin' (RBAC)
+        // Fallback: vẫn kiểm tra isAdmin để tương thích với dữ liệu cũ
+        const adminLink = document.getElementById('nav-admin-link');
+        if (adminLink) {
+            const isAdmin = AppState.user.role === 'admin' || AppState.user.isAdmin === true;
+            adminLink.style.display = isAdmin ? 'flex' : 'none';
         }
     }
 }
