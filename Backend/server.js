@@ -134,27 +134,36 @@ async function ensureAdminExists() {
         console.error('⚠️ Lỗi khi khởi tạo Admin (server vẫn tiếp tục):', e.message);
     }
 }
-
+const dns = require('dns');
 // Nodemailer Configuration
 const transporter = nodemailer.createTransport({
     host: 'smtp.gmail.com',
     port: 465,
     secure: true,
-    family: 4, // 👈 CÚ CHỐT Ở ĐÂY: Bắt buộc dùng IPv4, cấm tiệt IPv6
     auth: {
         user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASSWORD // Vẫn dùng mật khẩu ứng dụng nhé
+        pass: process.env.EMAIL_PASSWORD
     },
     tls: {
         rejectUnauthorized: false
     },
-    // Bơm thời gian chờ
     connectionTimeout: 20000,
     greetingTimeout: 20000,
     socketTimeout: 20000,
+
+    // 👇 CHIÊU CUỐI: Tự tay dò DNS, chỉ lấy IPv4
+    lookup: (hostname, options, callback) => {
+        dns.lookup(hostname, { family: 4 }, (err, address, family) => {
+            if (err) {
+                console.error('DNS Lookup Error:', err);
+            } else {
+                console.log(`[SMTP] Đã ép thành công ${hostname} về IPv4: ${address}`);
+            }
+            callback(err, address, family);
+        });
+    }
 });
 
-// Log để debug
 transporter.verify((err) => {
     if (err) console.error('❌ SMTP verify failed:', err.message);
     else console.log('✅ SMTP ready: Gmail');
