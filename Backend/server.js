@@ -134,7 +134,7 @@ async function ensureAdminExists() {
         console.error('⚠️ Lỗi khi khởi tạo Admin (server vẫn tiếp tục):', e.message);
     }
 }
-const dns = require('dns');
+
 // Nodemailer Configuration
 const transporter = nodemailer.createTransport({
     host: 'smtp.gmail.com',
@@ -151,7 +151,7 @@ const transporter = nodemailer.createTransport({
     greetingTimeout: 20000,
     socketTimeout: 20000,
 
-    // 👇 CHIÊU CUỐI: Tự tay dò DNS, chỉ lấy IPv4
+    // Tự tay dò DNS, chỉ lấy IPv4
     lookup: (hostname, options, callback) => {
         dns.lookup(hostname, { family: 4 }, (err, address, family) => {
             if (err) {
