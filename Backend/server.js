@@ -7,7 +7,13 @@ const mongoose = require('mongoose');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const rateLimit = require('express-rate-limit');
-require('dotenv').config({ path: require('path').resolve(__dirname, '../.env') });
+// Load .env nếu có (local dev). Trên Render, env vars được inject qua OS nên không cần file .env
+const dotenvPath = require('path').resolve(__dirname, '../.env');
+if (require('fs').existsSync(dotenvPath)) {
+    require('dotenv').config({ path: dotenvPath });
+} else {
+    require('dotenv').config(); // fallback: tìm .env từ cwd
+}
 
 const User = require('./models/User');
 const Goal = require('./models/Goal');
@@ -127,14 +133,18 @@ async function ensureAdminExists() {
 }
 
 // Nodemailer Configuration
+// Port 587 + STARTTLS (thay vì 465+SSL) để tránh bị Render/cloud chặn outbound
 const transporter = nodemailer.createTransport({
     host: 'smtp.gmail.com',
-    port: 465,
-    secure: true,
-    family: 4,
+    port: 587,
+    secure: false,          // false = STARTTLS (upgrade sau khi kết nối)
+    family: 4,              // Force IPv4 - tránh lỗi IPv6 trên Render
     auth: {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASSWORD
+    },
+    tls: {
+        rejectUnauthorized: false   // Cho phép self-signed cert trên cloud
     }
 });
 
