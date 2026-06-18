@@ -1,3 +1,6 @@
+const dns = require('dns');
+dns.setDefaultResultOrder('ipv4first'); // Force IPv4 DNS - fix ENETUNREACH trên Render
+
 const express = require('express');
 const cors = require('cors');
 const fs = require('fs').promises;
