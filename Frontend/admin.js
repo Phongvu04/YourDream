@@ -1,4 +1,6 @@
-const API = 'http://localhost:3000/api';
+const API = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+    ? 'http://localhost:3000/api'
+    : window.location.origin + '/api';
 const S = { token: null, user: null, page: 'dashboard', usersPage: 1, goalsPage: 1, chatsPage: 1, trustUserId: null, trustUserName: '' };
 
 function hdrs() { return { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + S.token }; }
