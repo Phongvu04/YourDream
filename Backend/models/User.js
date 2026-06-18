@@ -8,6 +8,16 @@ const userSchema = new mongoose.Schema(
         password: { type: String, required: true },
         createdAt:{ type: String },
 
+        // ── RBAC Role ─────────────────────────────────────────
+        // Phân quyền theo vai trò (Role-Based Access Control):
+        //   'user'  → người dùng thông thường (mặc định)
+        //   'admin' → quản trị viên toàn quyền
+        role: {
+            type: String,
+            enum: ['user', 'admin'],
+            default: 'user',
+        },
+
         // ── Trust Score ──────────────────────────────────────
         // Điểm uy tín của người dùng.
         // Bắt đầu ở 100, mỗi lần từ bỏ mục tiêu trừ 50 điểm.
@@ -26,7 +36,9 @@ const userSchema = new mongoose.Schema(
             min: 0,
         },
 
-        // ── Admin flag ───────────────────────────────────────
+        // ── Admin flag (giữ lại để tương thích với dữ liệu cũ) ──
+        // Ưu tiên kiểm tra role === 'admin',
+        // isAdmin chỉ dùng khi cần đọc record cũ chưa có trường role.
         isAdmin: {
             type: Boolean,
             default: false,

@@ -69,16 +69,27 @@ async function connectDB() {
     }
 }
 
-// Đảm bảo luôn có tài khoản Admin trong DB
+// Đảm bảo luôn có tài khoản Admin trong DB (RBAC)
 async function ensureAdminExists() {
     try {
         const ADMIN_EMAIL    = process.env.ADMIN_EMAIL    || 'admin@gmail.com';
         const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '123456';
 
-        // Đã có admin rồi → bỏ qua
-        const existingAdmin = await User.findOne({ isAdmin: true });
+        // Kiểm tra theo cả 2 cách: role mới và isAdmin cũ
+        const existingAdmin = await User.findOne({
+            $or: [{ role: 'admin' }, { isAdmin: true }]
+        });
         if (existingAdmin) {
-            console.log(`👑 Admin đã tồn tại: ${existingAdmin.email}`);
+            // Đảm bảo tài khoản admin cũ cũng có trường role mới
+            if (existingAdmin.role !== 'admin') {
+                await User.findOneAndUpdate(
+                    { _id: existingAdmin._id },
+                    { $set: { role: 'admin' } }
+                );
+                console.log(`👑 Đã cập nhật role='admin' cho: ${existingAdmin.email}`);
+            } else {
+                console.log(`👑 Admin đã tồn tại: ${existingAdmin.email} (role: admin)`);
+            }
             return;
         }
 
@@ -90,19 +101,21 @@ async function ensureAdminExists() {
         if (existingUser) {
             await User.findOneAndUpdate(
                 { email: ADMIN_EMAIL },
-                { $set: { isAdmin: true, password: hashedPassword } }
+                // Cập nhật cả role (mới) lẫn isAdmin (cũ) để backward-compatible
+                { $set: { role: 'admin', isAdmin: true, password: hashedPassword } }
             );
             console.log(`👑 Đã cấp quyền Admin cho tài khoản: ${ADMIN_EMAIL}`);
             return;
         }
 
-        // Chưa có gì → tạo mới
+        // Chưa có gì → tạo mới với cả 2 field
         await User.create({
             id:           'admin_' + Date.now(),
             name:         'Admin',
             email:        ADMIN_EMAIL,
             password:     hashedPassword,
-            isAdmin:      true,
+            role:         'admin',   // ← RBAC field mới
+            isAdmin:      true,      // ← giữ lại để backward-compatible
             trustScore:   100,
             abandonCount: 0,
             createdAt:    new Date().toISOString(),
@@ -180,25 +193,14 @@ app.post('/api/auth/register', async (req, res) => {
 app.post('/api/auth/login', async (req, res) => {
     try {
         const { email, password } = req.body;
-
-
         const user = await User.findOne({ email });
-        if (!user) {
-            return res.status(400).json({ success: false, error: 'Tài khoản không tồn tại' });
-        }
-
-        if (user.isBanned) {
-            return res.status(403).json({ success: false, error: 'Tài khoản của bạn đã bị khóa. Vui lòng liên hệ quản trị viên.' });
-        }
-
+        if (!user) return res.status(400).json({ success: false, error: 'Tài khoản không tồn tại' });
+        if (user.isBanned) return res.status(403).json({ success: false, error: 'Tài khoản của bạn đã bị khóa. Vui lòng liên hệ quản trị viên.' });
         const isMatch = await bcrypt.compare(password, user.password);
-        if (!isMatch) {
-            return res.status(400).json({ success: false, error: 'Mật khẩu không chính xác' });
-        }
-
-        const token = jwt.sign({ id: user.id, email: user.email }, process.env.JWT_SECRET, { expiresIn: '7d' });
-
-        res.json({ success: true, token, user: { id: user.id, name: user.name, email: user.email } });
+        if (!isMatch) return res.status(400).json({ success: false, error: 'Mật khẩu không chính xác' });
+        const userRole = user.role || (user.isAdmin ? 'admin' : 'user');
+        const token = jwt.sign({ id: user.id, email: user.email, role: userRole }, process.env.JWT_SECRET, { expiresIn: '7d' });
+        res.json({ success: true, token, user: { id: user.id, name: user.name, email: user.email, role: userRole } });
     } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
@@ -214,117 +216,64 @@ app.post('/api/auth/forgot-password', async (req, res) => {
     try {
         const { email } = req.body;
         if (!email) return res.status(400).json({ success: false, error: 'Vui lòng cung cấp email' });
-        
         const user = await User.findOne({ email });
         if (!user) return res.status(400).json({ success: false, error: 'Email không tồn tại trong hệ thống' });
-        
-        const newPassword = Math.random().toString(36).slice(-8); // Generate 8-character random password
-        
+        const newPassword = Math.random().toString(36).slice(-8);
         const salt = await bcrypt.genSalt(10);
         user.password = await bcrypt.hash(newPassword, salt);
         await user.save();
-        
         const mailOptions = {
             from: `"GoalFlow Team" <${process.env.EMAIL_USER}>`,
             to: email,
             subject: 'Khôi phục mật khẩu GoalFlow',
-            text: `Chào ${user.name},\n\nMật khẩu của bạn đã được đặt lại thành công.\n\nMật khẩu mới của bạn là: ${newPassword}\n\nVui lòng sử dụng mật khẩu này để đăng nhập hệ thống.\n\nTrân trọng,\nĐội ngũ GoalFlow`
+            text: `Chào ${user.name},\n\nMật khẩu mới của bạn là: ${newPassword}\n\nTrân trọng,\nĐội ngũ GoalFlow`
         };
-        
-        // Send email in background
         transporter.sendMail(mailOptions).catch(console.error);
-        
         res.json({ success: true, message: 'Mật khẩu mới đã được gửi vào email của bạn. Vui lòng kiểm tra hộp thư.' });
-    } catch (e) {
-        res.status(500).json({ success: false, error: e.message });
-    }
+    } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
 app.post('/api/auth/change-password', authMiddleware, async (req, res) => {
     try {
         const { oldPassword, newPassword } = req.body;
-        
-        if (!oldPassword || !newPassword) {
-            return res.status(400).json({ success: false, error: 'Vui lòng cung cấp đầy đủ mật khẩu' });
-        }
-
-        if (newPassword.length < 6) {
-            return res.status(400).json({ success: false, error: 'Mật khẩu mới phải từ 6 ký tự trở lên' });
-        }
-
+        if (!oldPassword || !newPassword) return res.status(400).json({ success: false, error: 'Vui lòng cung cấp đầy đủ mật khẩu' });
+        if (newPassword.length < 6) return res.status(400).json({ success: false, error: 'Mật khẩu mới phải từ 6 ký tự trở lên' });
         const user = await User.findOne({ id: req.user.id });
-        if (!user) {
-            return res.status(404).json({ success: false, error: 'Không tìm thấy người dùng' });
-        }
-
+        if (!user) return res.status(404).json({ success: false, error: 'Không tìm thấy người dùng' });
         const isMatch = await bcrypt.compare(oldPassword, user.password);
-        if (!isMatch) {
-            return res.status(400).json({ success: false, error: 'Mật khẩu hiện tại không chính xác' });
-        }
-
+        if (!isMatch) return res.status(400).json({ success: false, error: 'Mật khẩu hiện tại không chính xác' });
         const salt = await bcrypt.genSalt(10);
         user.password = await bcrypt.hash(newPassword, salt);
         await user.save();
-
         res.json({ success: true, message: 'Đổi mật khẩu thành công' });
-    } catch (e) {
-        res.status(500).json({ success: false, error: e.message });
-    }
+    } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
 // --- GOAL ROUTES ---
-
-// Và lưu toàn bộ goals (frontend gửi mảng goals về để sync)
 app.post('/api/goals', authMiddleware, async (req, res) => {
     try {
         const { goals } = req.body;
-        const userId    = req.user.id;
-
+        const userId = req.user.id;
         if (!goals || goals.length === 0) {
-            // Xóa hết nếu frontend gửi mảng rỗng
             await Goal.deleteMany({ userId });
             return res.json({ success: true, saved: 0 });
         }
-
-        // Chuẩn hóa dữ liệu trước khi lưu
         const VALID_STATUSES = ['active', 'checking', 'completed', 'abandoned'];
         const sanitized = goals.map(g => ({
-            ...g,
-            userId,
-            // Map các giá trị status không hợp lệ về 'active'
+            ...g, userId,
             status: VALID_STATUSES.includes(g.status) ? g.status : 'active',
-            // Đảm bảo milestones là mảng hợp lệ
-            milestones: Array.isArray(g.milestones) ? g.milestones.map(m => ({
-                task:  m.task  || 'Milestone',
-                isDone: Boolean(m.isDone),
-                proof: m.proof || '',
-            })) : [],
+            milestones: Array.isArray(g.milestones) ? g.milestones.map(m => ({ task: m.task || 'Milestone', isDone: Boolean(m.isDone), proof: m.proof || '' })) : [],
         }));
-
-        // Dùng bulkWrite upsert thay vì deleteMany + insertMany
-        // → không mất dữ liệu nếu một goal bị lỗi
-        const ops = sanitized.map(g => ({
-            updateOne: {
-                filter: { id: g.id, userId },
-                update: { $set: g },
-                upsert: true,
-            }
-        }));
-
+        const ops = sanitized.map(g => ({ updateOne: { filter: { id: g.id, userId }, update: { $set: g }, upsert: true } }));
         const result = await Goal.bulkWrite(ops, { ordered: false });
-
-        // Xóa các goal trong DB không còn trong danh sách frontend gửi
         const frontendIds = sanitized.map(g => g.id);
         await Goal.deleteMany({ userId, id: { $nin: frontendIds } });
-
         res.json({ success: true, saved: result.upsertedCount + result.modifiedCount });
-
     } catch (e) {
         console.error('❌ [Goals POST] Lỗi:', e.message);
         res.status(500).json({ success: false, error: e.message });
     }
 });
-
 
 app.get('/api/goals', authMiddleware, async (req, res) => {
     try {
@@ -332,6 +281,7 @@ app.get('/api/goals', authMiddleware, async (req, res) => {
         res.json({ success: true, goals });
     } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
+
 
 // --- AI INTEGRATION (Google Gemini) ---
 // Model fallback list - thu lan luot den khi thanh cong
@@ -1072,24 +1022,46 @@ Trân trọng,
 // ADMIN ROUTES — /api/admin/*
 // ═══════════════════════════════════════════════════════════════
 
-// [ADMIN] Đăng nhập Admin
+// [ADMIN] Đăng nhập Admin — một cổng đăng nhập, phân quyền bên trong (RBAC)
 app.post('/api/admin/login', async (req, res) => {
     try {
         const { email, password } = req.body;
         if (!email || !password) {
             return res.status(400).json({ success: false, error: 'Vui lòng nhập email và mật khẩu' });
         }
+
         const user = await User.findOne({ email });
-        if (!user || !user.isAdmin) {
+        if (!user) {
+            return res.status(403).json({ success: false, error: 'Tài khoản không tồn tại' });
+        }
+
+        // Kiểm tra quyền Admin theo RBAC: ưu tiên role, fallback về isAdmin cũ
+        const hasAdminRole = user.role === 'admin' || user.isAdmin === true;
+        if (!hasAdminRole) {
             return res.status(403).json({ success: false, error: 'Tài khoản không có quyền Admin' });
         }
+
+        if (user.isBanned) {
+            return res.status(403).json({ success: false, error: 'Tài khoản đã bị khóa' });
+        }
+
         const isMatch = await bcrypt.compare(password, user.password);
         if (!isMatch) {
             return res.status(400).json({ success: false, error: 'Mật khẩu không chính xác' });
         }
-        const token = jwt.sign({ id: user.id, email: user.email }, process.env.JWT_SECRET, { expiresIn: '7d' });
 
-        res.json({ success: true, token, user: { id: user.id, name: user.name, email: user.email, isAdmin: user.isAdmin || false } });
+        // Nhúng role vào JWT payload
+        const token = jwt.sign(
+            { id: user.id, email: user.email, role: 'admin' },
+            process.env.JWT_SECRET,
+            { expiresIn: '7d' }
+        );
+
+        res.json({
+            success: true,
+            token,
+            user: { id: user.id, name: user.name, email: user.email, role: 'admin' }
+        });
     } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
