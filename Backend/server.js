@@ -137,15 +137,18 @@ async function ensureAdminExists() {
 
 // Nodemailer Configuration
 const transporter = nodemailer.createTransport({
-    service: 'gmail', // Dùng luôn template có sẵn của Nodemailer thay vì tự định nghĩa host/port
+    host: 'smtp.gmail.com',
+    port: 465,
+    secure: true,
+    family: 4, // 👈 CÚ CHỐT Ở ĐÂY: Bắt buộc dùng IPv4, cấm tiệt IPv6
     auth: {
         user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASSWORD // Vẫn phải là Mật khẩu ứng dụng 16 ký tự nhé
+        pass: process.env.EMAIL_PASSWORD // Vẫn dùng mật khẩu ứng dụng nhé
     },
     tls: {
-        rejectUnauthorized: false // Bỏ qua lỗi chứng chỉ khắt khe trên cloud
+        rejectUnauthorized: false
     },
-    // Bơm thêm máu (thời gian chờ) cho Render vì mạng cloud đôi khi bị trễ
+    // Bơm thời gian chờ
     connectionTimeout: 20000,
     greetingTimeout: 20000,
     socketTimeout: 20000,
