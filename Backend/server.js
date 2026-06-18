@@ -60,9 +60,56 @@ async function connectDB() {
             }
         } catch (e) { console.error('Lỗi khi clean up DB:', e); }
 
+        // Tự động tạo/cấp quyền tài khoản Admin nếu chưa có
+        await ensureAdminExists();
+
     } catch (error) {
         console.error('❌ Lỗi kết nối MongoDB:', error);
         process.exit(1); // Dừng server nếu không kết nối được DB
+    }
+}
+
+// Đảm bảo luôn có tài khoản Admin trong DB
+async function ensureAdminExists() {
+    try {
+        const ADMIN_EMAIL    = process.env.ADMIN_EMAIL    || 'admin@gmail.com';
+        const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '123456';
+
+        // Đã có admin rồi → bỏ qua
+        const existingAdmin = await User.findOne({ isAdmin: true });
+        if (existingAdmin) {
+            console.log(`👑 Admin đã tồn tại: ${existingAdmin.email}`);
+            return;
+        }
+
+        const salt           = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash(ADMIN_PASSWORD, salt);
+
+        // Email đó đã đăng ký bình thường → cấp quyền + đặt lại mật khẩu
+        const existingUser = await User.findOne({ email: ADMIN_EMAIL });
+        if (existingUser) {
+            await User.findOneAndUpdate(
+                { email: ADMIN_EMAIL },
+                { $set: { isAdmin: true, password: hashedPassword } }
+            );
+            console.log(`👑 Đã cấp quyền Admin cho tài khoản: ${ADMIN_EMAIL}`);
+            return;
+        }
+
+        // Chưa có gì → tạo mới
+        await User.create({
+            id:           'admin_' + Date.now(),
+            name:         'Admin',
+            email:        ADMIN_EMAIL,
+            password:     hashedPassword,
+            isAdmin:      true,
+            trustScore:   100,
+            abandonCount: 0,
+            createdAt:    new Date().toISOString(),
+        });
+        console.log(`👑 Đã tạo tài khoản Admin mới: ${ADMIN_EMAIL}`);
+    } catch (e) {
+        console.error('⚠️ Lỗi khi khởi tạo Admin (server vẫn tiếp tục):', e.message);
     }
 }
 
