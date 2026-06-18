@@ -137,23 +137,24 @@ async function ensureAdminExists() {
 
 // Nodemailer Configuration
 const transporter = nodemailer.createTransport({
-    host: 'smtp.gmail.com',
-    port: 465,            // Đổi sang port 465
-    secure: true,         // true cho port 465, false cho port 587
-    // family: 4,         // Bạn có thể giữ lại family: 4 để phòng hờ Render IPv6
+    service: 'gmail', // Dùng luôn template có sẵn của Nodemailer thay vì tự định nghĩa host/port
     auth: {
         user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASSWORD // Chắc chắn đây là mật khẩu ứng dụng
-    }
+        pass: process.env.EMAIL_PASSWORD // Vẫn phải là Mật khẩu ứng dụng 16 ký tự nhé
+    },
+    tls: {
+        rejectUnauthorized: false // Bỏ qua lỗi chứng chỉ khắt khe trên cloud
+    },
+    // Bơm thêm máu (thời gian chờ) cho Render vì mạng cloud đôi khi bị trễ
+    connectionTimeout: 20000,
+    greetingTimeout: 20000,
+    socketTimeout: 20000,
 });
 
 // Log để debug
 transporter.verify((err) => {
-    if (err) {
-        console.error('❌ SMTP verify failed:', err.message);
-    } else {
-        console.log('✅ SMTP ready: Gmail');
-    }
+    if (err) console.error('❌ SMTP verify failed:', err.message);
+    else console.log('✅ SMTP ready: Gmail');
 });
 
 async function sendWelcomeEmail(toEmail, userName) {
